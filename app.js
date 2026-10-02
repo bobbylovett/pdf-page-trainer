@@ -18,6 +18,7 @@ const els = {
   playBtn: $('playBtn'), pauseBtn: $('pauseBtn'), intervalInput: $('intervalInput'),
   searchDialog: $('searchDialog'), searchInput: $('searchInput'), searchResults: $('searchResults'),
   settingsDialog: $('settingsDialog'), playModeSelect: $('playModeSelect'),
+  displayModeSelect: $('displayModeSelect'),
   settingsIntervalInput: $('settingsIntervalInput'), thinkTimeInput: $('thinkTimeInput'),
   afterSpeakInput: $('afterSpeakInput'), randomToggle: $('randomToggle'),
   settingsDoneBtn: $('settingsDoneBtn')
@@ -56,6 +57,7 @@ function restoreSettings() {
   const think = clampTenths(localStorage.getItem('pdfTrainerThinkTime'), 0, 60, 2.0);
   const after = clampTenths(localStorage.getItem('pdfTrainerAfterSpeak'), 0, 60, 1.0);
   const mode = localStorage.getItem('pdfTrainerPlayMode') === 'quiz' ? 'quiz' : 'normal';
+  const displayMode = localStorage.getItem('pdfTrainerDisplayMode') === 'photo' ? 'photo' : 'page';
   const random = localStorage.getItem('pdfTrainerRandom') === '1';
 
   els.intervalInput.value = interval.toFixed(1);
@@ -63,6 +65,7 @@ function restoreSettings() {
   els.thinkTimeInput.value = think.toFixed(1);
   els.afterSpeakInput.value = after.toFixed(1);
   els.playModeSelect.value = mode;
+  els.displayModeSelect.value = displayMode;
   els.randomToggle.checked = random;
   updateSettingsVisibility();
 }
@@ -83,6 +86,7 @@ function saveQuizSettings() {
   localStorage.setItem('pdfTrainerThinkTime', String(think));
   localStorage.setItem('pdfTrainerAfterSpeak', String(after));
   localStorage.setItem('pdfTrainerPlayMode', els.playModeSelect.value);
+  localStorage.setItem('pdfTrainerDisplayMode', els.displayModeSelect.value);
   localStorage.setItem('pdfTrainerRandom', els.randomToggle.checked ? '1' : '0');
   updateSettingsVisibility();
   updateModeInfo();
@@ -101,6 +105,10 @@ els.settingsIntervalInput.addEventListener('change', () => saveIntervalFrom(els.
 els.thinkTimeInput.addEventListener('change', saveQuizSettings);
 els.afterSpeakInput.addEventListener('change', saveQuizSettings);
 els.playModeSelect.addEventListener('change', saveQuizSettings);
+els.displayModeSelect.addEventListener('change', async () => {
+  saveQuizSettings();
+  if (currentDoc()) await renderCurrentPage();
+});
 els.randomToggle.addEventListener('change', saveQuizSettings);
 
 els.openBtn.addEventListener('click', () => els.fileInput.click());
@@ -453,6 +461,29 @@ function totalNamedPages() {
   return state.docs.reduce((sum, doc) => sum + doc.pages.filter(p => p.name || p.rawText).length, 0);
 }
 
+function isPhotoPriorityActive() {
+  return isMobile() && els.displayModeSelect.value === 'photo';
+}
+
+function getPhotoCrop(baseViewport) {
+  // The graduation-album pages use a highly consistent layout:
+  // class/number at the top, portrait centered below it.
+  // Keep a slightly generous crop so small layout differences do not cut faces.
+  const left = baseViewport.width * 0.14;
+  const top = baseViewport.height * 0.17;
+  const width = baseViewport.width * 0.72;
+  const height = baseViewport.height * 0.73;
+
+  return {
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height
+  };
+}
+
 async function renderCurrentPage() {
   const doc = currentDoc();
   if (!doc) return;
@@ -464,44 +495,99 @@ async function renderCurrentPage() {
     const page = await doc.pdf.getPage(state.currentPageIndex + 1);
     const base = page.getViewport({ scale: 1 });
     const rect = els.viewer.getBoundingClientRect();
-    const cssScale = Math.min(rect.width / base.width, rect.height / base.height);
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    const renderScale = Math.max(0.5, cssScale * dpr);
-    const viewport = page.getViewport({ scale: renderScale });
-
-    if (token !== state.renderToken) return;
+    const photoPriority = isPhotoPriorityActive();
 
     const canvas = els.canvas;
     const ctx = canvas.getContext('2d', { alpha: false });
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
-    canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
 
     if (state.renderTask) {
       try { state.renderTask.cancel(); } catch {}
       state.renderTask = null;
     }
 
-    const task = page.render({ canvasContext: ctx, viewport });
-    state.renderTask = task;
+    if (!photoPriority) {
+      const cssScale = Math.min(rect.width / base.width, rect.height / base.height);
+      const renderScale = Math.max(0.5, cssScale * dpr);
+      const viewport = page.getViewport({ scale: renderScale });
 
-    try {
-      await task.promise;
-    } catch (err) {
-      if (err?.name === 'RenderingCancelledException') return;
-      throw err;
-    } finally {
-      if (state.renderTask === task) state.renderTask = null;
+      if (token !== state.renderToken) return;
+
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
+      canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
+
+      const task = page.render({ canvasContext: ctx, viewport });
+      state.renderTask = task;
+
+      try {
+        await task.promise;
+      } catch (err) {
+        if (err?.name === 'RenderingCancelledException') return;
+        throw err;
+      } finally {
+        if (state.renderTask === task) state.renderTask = null;
+      }
+
+      if (token !== state.renderToken) return;
+
+      state.lastViewport = viewport;
+      state.lastDpr = dpr;
+    } else {
+      const crop = getPhotoCrop(base);
+      const cssScale = Math.min(rect.width / crop.width, rect.height / crop.height);
+      const renderScale = Math.max(0.5, cssScale * dpr);
+      const fullViewport = page.getViewport({ scale: renderScale });
+
+      if (token !== state.renderToken) return;
+
+      const cropLeft = crop.left * renderScale;
+      const cropTop = crop.top * renderScale;
+      const cropWidth = crop.width * renderScale;
+      const cropHeight = crop.height * renderScale;
+
+      const offscreen = document.createElement('canvas');
+      offscreen.width = Math.ceil(fullViewport.width);
+      offscreen.height = Math.ceil(fullViewport.height);
+      const offctx = offscreen.getContext('2d', { alpha: false });
+
+      const task = page.render({ canvasContext: offctx, viewport: fullViewport });
+      state.renderTask = task;
+
+      try {
+        await task.promise;
+      } catch (err) {
+        if (err?.name === 'RenderingCancelledException') return;
+        throw err;
+      } finally {
+        if (state.renderTask === task) state.renderTask = null;
+      }
+
+      if (token !== state.renderToken) return;
+
+      canvas.width = Math.max(1, Math.floor(cropWidth));
+      canvas.height = Math.max(1, Math.floor(cropHeight));
+      canvas.style.width = `${Math.max(1, Math.floor(cropWidth / dpr))}px`;
+      canvas.style.height = `${Math.max(1, Math.floor(cropHeight / dpr))}px`;
+
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(
+        offscreen,
+        cropLeft, cropTop, cropWidth, cropHeight,
+        0, 0, canvas.width, canvas.height
+      );
+
+      // The printed name is outside the photo-focused crop, so no PDF-name
+      // mask geometry is required in this mode. The app's page-info line still
+      // follows quiz reveal timing.
+      state.lastViewport = null;
+      state.lastDpr = dpr;
     }
-
-    if (token !== state.renderToken) return;
 
     canvas.classList.add('visible');
     els.emptyState.classList.add('hidden');
-
-    state.lastViewport = viewport;
-    state.lastDpr = dpr;
 
     updatePageInfo();
     updateNameMask();
@@ -548,7 +634,8 @@ function updateNameMask() {
   const viewport = state.lastViewport;
   const dpr = state.lastDpr || 1;
 
-  if (!meta || !viewport || !shouldHideQuizName() || !meta.nameItems?.length) {
+  if (isPhotoPriorityActive() ||
+      !meta || !viewport || !shouldHideQuizName() || !meta.nameItems?.length) {
     els.nameMask.classList.add('hidden');
     return;
   }
@@ -997,10 +1084,11 @@ els.viewer.addEventListener('pointercancel', () => {
 });
 
 els.searchDialog.addEventListener('close', () => showMobileChrome(true));
-els.settingsDialog.addEventListener('close', () => {
+els.settingsDialog.addEventListener('close', async () => {
   saveIntervalFrom(els.settingsIntervalInput.value);
   saveQuizSettings();
   updateControls();
+  if (currentDoc()) await renderCurrentPage();
   showMobileChrome(true);
 });
 
