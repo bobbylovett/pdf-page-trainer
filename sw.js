@@ -1,4 +1,4 @@
-const CACHE = 'pdf-page-trainer-web-v8';
+const CACHE = 'pdf-page-trainer-web-v9';
 const APP_FILES = [
   './',
   './index.html',

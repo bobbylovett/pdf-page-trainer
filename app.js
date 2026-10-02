@@ -13,6 +13,7 @@ const els = {
   openBtn: $('openBtn'), fileInput: $('fileInput'), docSelect: $('docSelect'),
   searchBtn: $('searchBtn'), settingsBtn: $('settingsBtn'),
   groupBar: $('groupBar'), viewer: $('viewer'), canvas: $('pdfCanvas'), nameMask: $('nameMask'),
+  quizAnswer: $('quizAnswer'),
   emptyState: $('emptyState'), loading: $('loading'), pageInfo: $('pageInfo'),
   modeInfo: $('modeInfo'), prevBtn: $('prevBtn'), nextBtn: $('nextBtn'),
   playBtn: $('playBtn'), pauseBtn: $('pauseBtn'), intervalInput: $('intervalInput'),
@@ -90,6 +91,7 @@ function saveQuizSettings() {
   localStorage.setItem('pdfTrainerRandom', els.randomToggle.checked ? '1' : '0');
   updateSettingsVisibility();
   updateModeInfo();
+  updateQuizAnswerReveal();
 }
 
 function updateSettingsVisibility() {
@@ -593,6 +595,7 @@ async function renderCurrentPage() {
 
     updatePageInfo();
     updateNameMask();
+    updateQuizAnswerReveal();
     updateModeInfo();
     preloadNeighbors();
 
@@ -697,9 +700,31 @@ function updateNameMask() {
   els.nameMask.classList.remove('hidden');
 }
 
+function updateQuizAnswerReveal() {
+  const meta = currentMeta();
+  const active =
+    state.playing &&
+    els.playModeSelect.value === 'quiz' &&
+    isPhotoPriorityActive() &&
+    state.quizNameRevealed &&
+    !!meta?.name;
+
+  els.viewer.classList.toggle('quiz-answer-revealed', active);
+
+  if (!active) {
+    els.quizAnswer.textContent = '';
+    els.quizAnswer.classList.add('hidden');
+    return;
+  }
+
+  els.quizAnswer.textContent = meta.name;
+  els.quizAnswer.classList.remove('hidden');
+}
+
 function refreshQuizNameVisibility() {
   updatePageInfo();
   updateNameMask();
+  updateQuizAnswerReveal();
 }
 
 function updateModeInfo() {
