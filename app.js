@@ -462,17 +462,19 @@ function totalNamedPages() {
 }
 
 function isPhotoPriorityActive() {
-  return isMobile() && els.displayModeSelect.value === 'photo';
+  // If the user explicitly selects photo-priority mode, always honor it.
+  // The default remains "page", so PC display does not change unless selected.
+  return els.displayModeSelect.value === 'photo';
 }
 
 function getPhotoCrop(baseViewport) {
-  // The graduation-album pages use a highly consistent layout:
-  // class/number at the top, portrait centered below it.
-  // Keep a slightly generous crop so small layout differences do not cut faces.
-  const left = baseViewport.width * 0.14;
-  const top = baseViewport.height * 0.17;
-  const width = baseViewport.width * 0.72;
-  const height = baseViewport.height * 0.73;
+  // Stronger portrait-focused crop for an obvious size increase.
+  // The crop keeps some margin around the person so hair / shoulders are less
+  // likely to be cut even when individual album pages differ slightly.
+  const left = baseViewport.width * 0.21;
+  const top = baseViewport.height * 0.20;
+  const width = baseViewport.width * 0.58;
+  const height = baseViewport.height * 0.70;
 
   return {
     left,
