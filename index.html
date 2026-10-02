@@ -17,6 +17,7 @@
       <button id="openBtn" class="primary">PDF選択</button>
       <select id="docSelect" aria-label="PDF選択" disabled></select>
       <button id="searchBtn" title="名前検索" disabled>検索</button>
+      <button id="settingsBtn" title="再生設定">設定</button>
     </header>
 
     <section id="groupBar" class="groupbar" aria-label="組選択"></section>
@@ -28,8 +29,10 @@
         <div class="empty-note">PDFは端末内で処理し、このWebアプリから外部へアップロードしません。</div>
       </div>
       <canvas id="pdfCanvas"></canvas>
+      <div id="nameMask" class="name-mask hidden" aria-hidden="true"></div>
       <div id="loading" class="loading hidden">読み込み中…</div>
       <div id="pageInfo" class="page-info hidden"></div>
+      <div id="modeInfo" class="mode-info hidden"></div>
     </main>
 
     <footer class="controls">
@@ -37,7 +40,7 @@
       <button id="playBtn" class="play" disabled>▶</button>
       <button id="pauseBtn" disabled>Ⅱ</button>
       <button id="nextBtn" disabled>▶|</button>
-      <label class="interval-wrap">
+      <label class="interval-wrap" title="通常再生の送り時間">
         <span>秒</span>
         <input id="intervalInput" type="number" min="0.2" max="60" step="0.1" value="1.0" inputmode="decimal" />
       </label>
@@ -54,6 +57,52 @@
       </div>
       <input id="searchInput" type="search" placeholder="名前の一部を入力" autocomplete="off" />
       <div id="searchResults" class="search-results"></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form method="dialog" class="settings-panel">
+      <div class="search-head">
+        <strong>再生設定</strong>
+        <button value="cancel" aria-label="閉じる">×</button>
+      </div>
+
+      <label class="setting-row">
+        <span>再生モード</span>
+        <select id="playModeSelect">
+          <option value="normal">通常再生（固定送り）</option>
+          <option value="quiz">名前クイズ（遅延読み上げ）</option>
+        </select>
+      </label>
+
+      <label class="setting-row normal-setting">
+        <span>通常送り時間</span>
+        <span class="number-unit"><input id="settingsIntervalInput" type="number" min="0.2" max="60" step="0.1" value="1.0" inputmode="decimal" /><em>秒</em></span>
+      </label>
+
+      <label class="setting-row quiz-setting">
+        <span>考える時間</span>
+        <span class="number-unit"><input id="thinkTimeInput" type="number" min="0" max="60" step="0.1" value="2.0" inputmode="decimal" /><em>秒</em></span>
+      </label>
+
+      <label class="setting-row quiz-setting">
+        <span>読み上げ後の待ち時間</span>
+        <span class="number-unit"><input id="afterSpeakInput" type="number" min="0" max="60" step="0.1" value="1.0" inputmode="decimal" /><em>秒</em></span>
+      </label>
+
+      <label class="setting-row check-row">
+        <span>
+          <strong>ランダム再生</strong>
+          <small>選択したPDF全部の人物を1巡シャッフル</small>
+        </span>
+        <input id="randomToggle" type="checkbox" />
+      </label>
+
+      <div class="setting-note">
+        名前の読み上げは「名前クイズ」モードでのみ行います。発音は端末の日本語音声エンジンに依存します。
+      </div>
+
+      <button id="settingsDoneBtn" value="default" class="primary settings-done">設定を閉じる</button>
     </form>
   </dialog>
 
